@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import tomllib
 
 import pytest
 
-from azure_functions_scaffold.packages import SUPPORTED_PACKAGES, requirement
+from azure_functions_scaffold.packages import (
+    AZURE_FUNCTIONS_SPECS,
+    SUPPORTED_PACKAGES,
+    requirement,
+)
 from azure_functions_scaffold.scaffolder import scaffold_project
 from azure_functions_scaffold.template_registry import build_project_options
 
@@ -20,7 +25,7 @@ _BARE_PIN = re.compile(r'"azure-functions[a-z-]*>=')
 
 
 def test_requirement_builds_full_specifier() -> None:
-    assert requirement("azure-functions") == "azure-functions>=1.23.0,<2.0.0"
+    assert requirement("azure-functions") == "azure-functions>=1.21.0,<2.0.0"
     assert requirement("azure-functions-doctor") == "azure-functions-doctor>=0.22.0"
 
 
@@ -53,7 +58,19 @@ def test_templates_reference_catalog() -> None:
 
 def test_root_pyproject_floors_match_catalog() -> None:
     root_pyproject = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    root_dependencies = tomllib.loads(root_pyproject)["project"]["optional-dependencies"]["dev"]
+    azure_functions_dependencies = {
+        dependency.split(";", maxsplit=1)[0].strip()
+        for dependency in root_dependencies
+        if dependency.startswith("azure-functions>=")
+    }
+    assert azure_functions_dependencies == {
+        f"azure-functions{AZURE_FUNCTIONS_SPECS['legacy']}",
+        f"azure-functions{AZURE_FUNCTIONS_SPECS['modern']}",
+    }
     for name, spec in SUPPORTED_PACKAGES.items():
+        if name == "azure-functions":
+            continue
         # Not every catalog entry is a smoke-test floor of the root project
         # (durable/langgraph are template-only), but any that appears must agree.
         pin = re.search(rf'"{re.escape(name)}(>=[^"]*)"', root_pyproject)
@@ -90,6 +107,29 @@ def test_rendered_pyproject_uses_catalog_specs(
         assert requirement(name) in pyproject, (
             f"{template_name} pyproject missing catalog pin {requirement(name)}"
         )
+
+
+@pytest.mark.parametrize(
+    ("python_version", "expected"),
+    [("3.12", "azure-functions>=1.21.0,<2.0.0"), ("3.13", "azure-functions>=1.21.0,<3.0.0")],
+)
+def test_rendered_pyproject_selects_azure_functions_line(
+    tmp_path: Path, python_version: str, expected: str
+) -> None:
+    # Given
+    options = build_project_options(
+        preset_name="standard",
+        python_version=python_version,
+        include_github_actions=False,
+        initialize_git=False,
+    )
+
+    # When
+    project_path = scaffold_project("sample", tmp_path, options=options)
+
+    # Then
+    pyproject = (project_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert expected in pyproject
 
 
 def test_requirement_unknown_name_raises_descriptive_error() -> None:
