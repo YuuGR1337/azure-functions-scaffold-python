@@ -202,13 +202,31 @@ def project_lane(candidate: Candidate, template: str, directory: Path) -> Summar
         ):
             checked([str(python), *arguments], directory / f"logs/{label}.log", cwd=project)
         summary = test_project(project, python, directory)
-        diagnostic = diagnose(project, python, directory / "logs")
+        if template == "langgraph":
+            checked(
+                [
+                    str(python),
+                    "-c",
+                    "import azure.functions as f; import function_app as a; "
+                    "assert isinstance(a.func_app, f.FunctionApp); "
+                    "assert len(a.func_app.get_functions()) > 0",
+                ],
+                directory / "logs/adapter-export.log",
+                cwd=project,
+            )
+        diagnostic = diagnose(project, python, directory / "logs", template=template)
         if diagnostic.exit_code:
             summary = replace(summary, status="FAIL", exit_code=diagnostic.exit_code)
         sdk = (directory / "logs/sdk-version.log").read_text().strip()
         return replace(
             summary,
-            reason=f"diagnostics={diagnostic.category}",
+            reason=f"diagnostics={diagnostic.category}"
+            + (
+                f"; exemption={diagnostic.exemption.issue}; expires={diagnostic.exemption.expires}"
+                if diagnostic.exemption
+                else ""
+            ),
+            diagnostics_status=diagnostic.category,
             candidate_version=candidate.version,
             artifact_sha256=candidate.digest,
             generated_python=f"{sys.version_info.major}.{sys.version_info.minor}",

@@ -43,6 +43,7 @@ class Summary:
     sdk_version: str = ""
     generated_digest: str = ""
     deployed_artifact_identity: Status = "NOT_APPLICABLE"
+    diagnostics_status: str = "NOT_APPLICABLE"
 
 
 _REDACTED = "[REDACTED]"
