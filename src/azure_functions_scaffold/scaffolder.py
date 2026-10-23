@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 import typer
 
 from azure_functions_scaffold.errors import ScaffoldError
+from azure_functions_scaffold.filesystem import resolve_path
 from azure_functions_scaffold.generator.pyproject import _compute_requirements_txt
 from azure_functions_scaffold.models import ProjectOptions, TemplateContext, TemplateSpec
 from azure_functions_scaffold.packages import AZURE_FUNCTIONS_SPECS, SUPPORTED_PACKAGES
@@ -81,6 +82,9 @@ def scaffold_project(
             if not _should_render_template(relative_path, context):
                 continue
             rendered_path = _render_path(relative_path, context)
+            existing_path = target_dir / rendered_path
+            if not resolve_path(existing_path).is_relative_to(target_dir):
+                raise ScaffoldError(f"Generated path escapes the selected project: {rendered_path}")
             output_path = staging_dir / rendered_path
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -287,7 +291,11 @@ def resolve_target_dir(destination: Path, project_name: str) -> Path:
         )
     if destination.exists() and not destination.is_dir():
         raise ScaffoldError(f"Destination must be a directory: {destination}")
-    return destination / project_name
+    canonical_destination = resolve_path(destination)
+    target = canonical_destination / project_name
+    if target.is_symlink():
+        raise ScaffoldError("Project directory must not be a symbolic link.")
+    return target
 
 
 def _iter_template_files(template_root: Path) -> list[Path]:
@@ -389,8 +397,8 @@ def _initialize_git_repository(project_root: Path) -> None:
         raise ScaffoldError("Git is not installed or not available on PATH.")
 
     try:
-        subprocess.run(
-            [git_executable, "init"],  # nosec B603
+        subprocess.run(  # nosec B603
+            [git_executable, "init"],
             cwd=project_root,
             check=True,
             capture_output=True,

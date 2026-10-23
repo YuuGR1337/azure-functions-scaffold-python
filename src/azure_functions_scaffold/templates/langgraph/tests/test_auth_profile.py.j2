@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+import importlib
+import warnings
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "value", ["true", "True", "TRUE", "1", "yes", "false", "", " true ", "true\n"]
+)
+def test_graph_auth_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    public_demo = value == "true"
+    monkeypatch.setenv("LANGGRAPH_PUBLIC_DEMO", value)
+    import function_app
+
+    with warnings.catch_warnings(record=True) as observed:
+        warnings.simplefilter("always")
+        module = importlib.reload(function_app)
+    bindings = [
+        function.get_trigger().get_dict_repr() for function in module.func_app.get_functions()
+    ]
+    execution = [
+        binding for binding in bindings if binding["route"].endswith(("/invoke", "/stream"))
+    ]
+    assert len(execution) == 2
+    assert {binding["authLevel"].value for binding in execution} == {
+        "anonymous" if public_demo else "function"
+    }
+    warned = any("LANGGRAPH_PUBLIC_DEMO=true" in str(item.message) for item in observed)
+    assert warned == public_demo
