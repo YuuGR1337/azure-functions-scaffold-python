@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from email.parser import BytesParser
 from hashlib import sha256
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, distribution, version
 import ipaddress
+import json
 import os
 from pathlib import Path
 import sys
 from urllib.parse import urlsplit
+import zipfile
 
 from tools.verification_evidence import Summary, collect, publish, save
 from tools.verification_process import run
@@ -44,6 +47,38 @@ def preflight(environment: Mapping[str, str]) -> str:
         return "E2E_EXPECTED_VERSION differs from installed candidate"
     if not Path(environment["VERIFICATION_WHEEL"]).is_file():
         return "VERIFICATION_WHEEL candidate is missing"
+    try:
+        wheel = Path(environment["VERIFICATION_WHEEL"])
+        with zipfile.ZipFile(wheel) as archive:
+            records = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+            if len(records) != 1 or archive.testzip() is not None:
+                return "Malformed candidate wheel metadata"
+            metadata = BytesParser().parsebytes(archive.read(records[0]))
+        if (
+            metadata["Name"].lower().replace("_", "-") != "azure-functions-scaffold"
+            or metadata["Version"] != environment["E2E_EXPECTED_VERSION"]
+        ):
+            return "Candidate wheel identity differs from expected candidate"
+        direct_url = json.loads(
+            distribution("azure-functions-scaffold").read_text("direct_url.json") or "{}"
+        )
+        digest = sha256(wheel.read_bytes()).hexdigest()
+        archive_info = direct_url.get("archive_info", {})
+        if (
+            archive_info.get("hashes", {}).get("sha256") != digest
+            and archive_info.get("hash") != f"sha256={digest}"
+        ):
+            return "Installed candidate is not associated with supplied wheel hash"
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        zipfile.BadZipFile,
+        PackageNotFoundError,
+    ):
+        return "Malformed or unverified candidate wheel"
     return ""
 
 

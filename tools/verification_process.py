@@ -7,22 +7,44 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import time
 from types import FrameType
 
 from tools.verification_evidence import redact
 
 
-def terminate(process: subprocess.Popen[str]) -> None:
+def _signal_group(pid: int, number: signal.Signals) -> None:
     try:
-        os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-        os.killpg(process.pid, signal.SIGKILL)
+        os.killpg(pid, number)
     except ProcessLookupError:
-        process.wait()
+        return
+
+
+def _group_alive(pid: int) -> bool:
+    for stat in Path("/proc").glob("[0-9]*/stat"):
+        try:
+            fields = stat.read_text().rsplit(")", 1)[1].split()
+            if int(fields[2]) == pid and fields[0] != "Z":
+                return True
+        except (OSError, IndexError, ValueError):
+            continue
+    return False
+
+
+def terminate(process: subprocess.Popen[str], registry: Path | None = None) -> None:
+    owned = {process.pid}
+    if registry is not None:
+        owned.update(int(pid) for pid in registry.read_text().splitlines())
+    for pid in owned:
+        _signal_group(pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while any(_group_alive(pid) for pid in owned) and time.monotonic() < deadline:
+        process.poll()
+        time.sleep(0.05)
+    for pid in owned:
+        if _group_alive(pid):
+            _signal_group(pid, signal.SIGKILL)
+    process.wait()
 
 
 @contextmanager
@@ -44,7 +66,14 @@ def child(
     command: list[str], log: Path, cwd: Path | None = None
 ) -> Iterator[subprocess.Popen[str]]:
     log.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output:
+    with (
+        tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output,
+        tempfile.TemporaryDirectory(prefix="verification-owned-") as temporary,
+    ):
+        registry = Path(
+            os.environ.get("VERIFICATION_OWNED_REGISTRY", str(Path(temporary) / "sessions"))
+        )
+        registry.touch(exist_ok=True)
         with subprocess.Popen(
             command,
             cwd=cwd,
@@ -52,7 +81,10 @@ def child(
             stderr=subprocess.STDOUT,
             text=True,
             start_new_session=True,
+            env={**os.environ, "VERIFICATION_OWNED_REGISTRY": str(registry)},
         ) as process:
+            with registry.open("a") as stream:
+                stream.write(f"{process.pid}\n")
 
             def interrupted(number: int, frame: FrameType | None) -> None:
                 raise KeyboardInterrupt(number)
@@ -63,7 +95,11 @@ def child(
             try:
                 yield process
             finally:
-                terminate(process)
+                for sig in previous:
+                    signal.signal(sig, signal.SIG_IGN)
+                terminate(
+                    process, registry if "VERIFICATION_OWNED_REGISTRY" not in os.environ else None
+                )
                 for sig, handler in previous.items():
                     signal.signal(sig, handler)
                 output.seek(0)
