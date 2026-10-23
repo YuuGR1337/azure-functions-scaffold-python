@@ -18,6 +18,11 @@ def doctor() -> int:
         target = "integration/verify" if tool in {"func", "azurite"} else "check"
         print(f"{tool}: {'available' if present else 'MISSING'} (required for {target})")
         missing |= not present
+    if missing:
+        print(
+            "development environment not created: run make install "
+            "(or install missing prerequisites)"
+        )
     return int(missing)
 
 

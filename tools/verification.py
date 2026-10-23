@@ -204,11 +204,14 @@ def main() -> int:
             "clean",
             "report",
             "focused",
+            "quality",
             "record",
         ),
     )
     args, extra = parser.parse_known_args()
     match args.lane:
+        case "quality":
+            return focused("check", ["make", "check-steps"])
         case "doctor":
             return doctor()
         case "clean":

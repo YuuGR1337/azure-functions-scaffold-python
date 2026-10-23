@@ -37,17 +37,23 @@ lint-workflows:
 	@$(RUN) -m tools.lint_release_workflows
 	@$(RUN) tools/lint_workflow_pins.py
 	@$(RUN) tools/lint_hatch_matrix.py
-check: style typecheck security lint-workflows
+check:
+	@$(RUN) -m tools.verification quality
+.PHONY: check-steps
+check-steps: style typecheck security lint-workflows
 check-all: verify
 
 .PHONY: test integration verify report clean generated-project host-smoke wheel-smoke
-test integration verify report clean generated-project host-smoke wheel-smoke:
+test integration verify generated-project host-smoke wheel-smoke:
 	@$(RUN) -m tools.verification $@
 .PHONY: doctor
-doctor:
-	@if [ -n "$$CI" ]; then $(PYTHON) -m tools.verification doctor; \
-	else environment=$$($(HATCH) env find) && test -x "$$environment/bin/python" && \
-	PATH="$$environment/bin:$$PATH" "$$environment/bin/python" -m tools.verification doctor; fi
+MAINTENANCE_PYTHON ?= $(shell command -v python3.11 || command -v python3)
+doctor report clean:
+	@environment=$$($(HATCH) env find 2>/dev/null); \
+	if [ -x "$$environment/bin/python" ]; then interpreter="$$environment/bin/python"; \
+	elif [ -n "$$VIRTUAL_ENV" ] && [ -x "$$VIRTUAL_ENV/bin/python" ]; then interpreter="$$VIRTUAL_ENV/bin/python"; \
+	else interpreter="$(MAINTENANCE_PYTHON)"; fi; \
+	"$$interpreter" -m tools.verification_maintenance $@
 
 .PHONY: cov e2e-local e2e-azure build docs docs-serve
 cov:
