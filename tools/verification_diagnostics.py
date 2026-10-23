@@ -38,6 +38,8 @@ def classify(document: str, code: int) -> Diagnostic:
                 raise ValueError("Invalid finding severity")
             if not isinstance(item["rule_id"], str):
                 raise ValueError("Missing rule identity")
+        if not set(REQUIRED_DIAGNOSTICS).issubset({item["rule_id"] for item in findings}):
+            raise ValueError("Missing required diagnostic identities")
         blocking = any(
             item["rule_id"] in REQUIRED_DIAGNOSTICS and item["status"] in {"fail", "skip"}
             for item in findings

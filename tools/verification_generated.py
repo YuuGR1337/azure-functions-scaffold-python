@@ -32,7 +32,10 @@ class Candidate:
 
 
 def checked(command: list[str], directory: Path, *, cwd: Path | None = None) -> None:
-    code = run(command, directory, 900, cwd=cwd)
+    with configured(
+        dict.fromkeys(("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE"), "")
+    ):
+        code = run(command, directory, 900, cwd=cwd)
     if code:
         raise LaneFailure(f"{command[0]} failed with exit {code}")
 
