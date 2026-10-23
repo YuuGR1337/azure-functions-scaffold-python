@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date
 from typing import Final
 
 TEMPLATES: Final = (
@@ -32,3 +34,23 @@ REQUIRED_DIAGNOSTICS: Final = frozenset(
         "check_host_json_version",
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticExemption:
+    owner: str
+    expires: date
+    issue: str
+    reason: str
+    doctor_version: str
+
+
+DIAGNOSTIC_EXEMPTIONS: Final = {
+    "langgraph": DiagnosticExemption(
+        owner="yeongseon",
+        expires=date(2026, 11, 23),
+        issue="https://github.com/yeongseon/azure-functions-doctor-python/issues/590",
+        reason="Doctor short-circuits on a valid LangGraphApp.function_app export",
+        doctor_version="0.23.1",
+    ),
+}
