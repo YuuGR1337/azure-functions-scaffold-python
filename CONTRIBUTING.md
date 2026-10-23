@@ -105,6 +105,23 @@ configuration recommendations. Exit 2 is CLI_ERROR; other abnormal exits or
 missing/malformed JSON are CRASH. Both block. Required findings block regardless
 of a changed display severity. New required categories need an explicit policy update.
 
+Every required rule identity must appear; an incomplete report never becomes diagnostic
+PASS. One temporary **diagnostics-only** exemption is declared in the manifest:
+generated `langgraph`, owner `yeongseon`, expires **2026-11-23 (UTC, exclusive)**,
+[Doctor #590](https://github.com/yeongseon/azure-functions-doctor-python/issues/590).
+Released Doctor **0.23.1** short-circuits on `func_app = lg_app.function_app` even
+though this exports a real SDK FunctionApp. Only exit 1 with the exact single
+`check_programming_model_v2` error and `programming_model=unknown` matches.
+The runner still executes Doctor and records a separate `diagnostics/summary.json`
+as **INCOMPLETE**, `required=false`, preserving its exit 1, owner, reason, expiry,
+version and issue link. The generated-project summary carries
+`diagnostics_status=INCOMPLETE`; its PASS refers only to the remaining required
+checks, not complete diagnostic certification. Structure, compile, lint, types,
+positive generated pytest, and an imported SDK FunctionApp export with registered
+functions remain blocking. Other templates, malformed reports, other tool versions,
+new failures and expiry receive no exemption. A complete report is classified normally.
+Remove this entry after a released Doctor fixes detection; never renew automatically.
+
 `func` and `azurite` are required for integration/verify, not check/test. Doctor
 reports these prerequisites without installing anything. Host smoke uses unique
 loopback ports, temporary emulator storage and run-owned process groups; teardown

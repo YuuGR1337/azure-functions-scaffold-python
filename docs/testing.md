@@ -12,6 +12,14 @@ Focused commands are PARTIAL, not Azure certification.
 Required generated tests must execute positive cases: exit 5, zero execution,
 all-skipped and unexpected skips block. Doctor JSON is classified into required
 findings, advisory recommendations, CLI errors and crashes; only advisories pass.
+Missing required diagnostic identities block. The sole manifest exemption is
+generated LangGraph with Doctor 0.23.1's exact adapter-detection short circuit
+([Doctor #590](https://github.com/yeongseon/azure-functions-doctor-python/issues/590)),
+owned by `yeongseon` and expiring 2026-11-23 UTC. Diagnostics remain **INCOMPLETE**
+in a separate summary and the template's `diagnostics_status`; only this diagnostic
+requirement is temporarily optional. Structure, compile/lint/types, positive pytest
+and a real SDK FunctionApp export with registered functions still block the matrix job.
+No other template, report shape or Doctor version is exempt; expiry fails closed.
 See the [contributing guide](https://github.com/yeongseon/azure-functions-scaffold-python/blob/main/CONTRIBUTING.md)
 for the stable rule policy, isolated wheel provenance, prerequisites and evidence.
 
